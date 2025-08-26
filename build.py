@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 STO_TZ = ZoneInfo("Europe/Stockholm")
-USER_AGENT = "Mozilla/5.0 (compatible; PMO-IT-Lunch/1.1)"
+USER_AGENT = "Mozilla/5.0 (compatible; PMO-IT-Lunch/1.2)"
 
 SOURCE_URLS = {
     "FEI": "https://www.fei.se/meny-fei-restaurant-lounge",
@@ -122,6 +122,16 @@ def parse_cirkeln(soup: BeautifulSoup, weekday_upper: str) -> list[str]:
     filtered = [ln for ln in lines if len(ln) > 3 and not re.match(r"^Pris|^11:|^Dagens|^Veckans", ln, re.I)]
     return filtered
 
+def insert_breaks(text: str) -> str:
+    t = text
+    t = re.sub(r"\s*/\s*", "<br>", t)
+    t = re.sub(r"\s*\|\s*", "<br>", t)
+    t = re.sub(r"\.\s+", ".<br>", t)
+    t = re.sub(r",\s+(?=[A-ZÅÄÖ])", ",<br>", t)
+    if "<br>" not in t and len(t) > 60:
+        t = re.sub(r"\s+(?=[A-ZÅÄÖ])", "<br>", t, count=1)
+    return t
+
 def get_menu_for(key: str, url: str, weekday_upper: str) -> DayMenu:
     soup = fetch(url)
     if key.lower() == "fei":
@@ -130,12 +140,8 @@ def get_menu_for(key: str, url: str, weekday_upper: str) -> DayMenu:
         items = parse_cirkeln(soup, weekday_upper)
     else:
         items = []
+    items = [insert_breaks(x) for x in items]
     return DayMenu(restaurant_key=key, items=items)
-
-def force_linebreaks(text: str) -> str:
-    t = re.sub(r"\s*/\s*", "<br>", text)
-    t = re.sub(r"\s*\|\s*", "<br>", t)
-    return t
 
 def render_html(weekday_upper: str, day_menus: list[DayMenu]) -> str:
     updated_at = datetime.now(tz=STO_TZ).strftime("%Y-%m-%d %H:%M")
@@ -153,14 +159,14 @@ def render_html(weekday_upper: str, day_menus: list[DayMenu]) -> str:
   .wrap{{max-width:760px;margin:32px auto;padding:0 16px}}
   .card{{background:var(--card);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.08);padding:24px}}
   h1{{margin:0 0 6px 0;font-size:28px}}
-  h2{{margin:0 0 16px 0;font-size:18px;letter-spacing:1px;color:var(--muted)}}
+  h2{{margin:0 0 16px 0;font-size:18px;letter-spacing:1px;color:#555}}
   .rest{{padding:14px 0;border-top:1px solid rgba(128,128,128,.25)}}
   .rest:first-of-type{{border-top:none}}
   .head{{display:flex;align-items:center;gap:12px;margin-bottom:6px}}
   .logo{{width:28px;height:28px;object-fit:contain;border-radius:6px;flex:0 0 28px;filter:contrast(1.1)}}
   .name{{font-weight:700}}
   .dish{{margin:4px 0;line-height:1.5}}
-  .footer{{margin-top:10px;color:var(--muted);font-size:12px}}
+  .footer{{margin-top:10px;color:#666;font-size:12px}}
 </style>
 <div class="wrap">
   <div class="card">
@@ -177,7 +183,7 @@ def render_html(weekday_upper: str, day_menus: list[DayMenu]) -> str:
         html += f"        <div class='name'>{name}</div>\n      </div>\n"
         if dm.items:
             for dish in dm.items:
-                html += f"      <div class='dish'>{force_linebreaks(dish)}</div>\n"
+                html += f"      <div class='dish'>{dish}</div>\n"
         else:
             html += f"      <div class='dish'><em>ingen meny hittad för {weekday_upper.capitalize()}</em></div>\n"
         html += "    </div>\n"
